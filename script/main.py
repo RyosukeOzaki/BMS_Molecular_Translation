@@ -428,10 +428,6 @@ def inference(test_loader, encoder, decoder, tokenizer, device):
     text_preds = np.concatenate(text_preds)
     return text_preds
 
-with open('../input/inchi-resnet-lstm-with-attention-starter/train.log') as f:
-    s = f.read()
-print(s)
-
 states = torch.load(f'../input/inchi-resnet-lstm-with-attention-starter/{CFG.model_name}_fold0_best.pth', map_location=torch.device('cpu'))
 
 encoder = Encoder(CFG.model_name, pretrained=False)

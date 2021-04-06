@@ -1,0 +1,6 @@
+scikit-build
+cmake
+opencv-python
+albumentations
+torch
+python-Levenshtein
