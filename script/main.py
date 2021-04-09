@@ -42,7 +42,7 @@ warnings.filterwarnings('ignore')
 
 from preprocessing import Tokenizer, TestDataset
 from model import Encoder, DecoderWithAttention
-from utils import get_test_file_path, get_train_file_path, init_logger, seed_torch, get_transforms
+from utils import get_test_file_path, get_train_file_path, init_logger, seed_torch, get_score, get_transforms
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -138,4 +138,7 @@ del test_loader, encoder, decoder, tokenizer; gc.collect()
 # test['InChI'] = [f"InChI=1S/{text}" for text in predictions]
 # test[['image_id', 'InChI']].to_csv('submission.csv', index=False)
 train_samples['InChI_Predict'] = [f"InChI=1S/{text}" for text in predictions]
-train_samples[['image_id', 'InChI', 'InChI_Predict']].to_csv('submission_train.csv', index=False)
+train_samples[['image_id', 'InChI', 'InChI_Predict']].to_csv('../output/submission_train.csv', index=False)
+
+avg_score = get_score(train_samples['InChI'].values(), train_samples['InChI_Predict'].values())
+print(avg_score)
