@@ -141,4 +141,15 @@ train_samples['InChI_Predict'] = [f"InChI=1S/{text}" for text in predictions.tol
 train_samples[['image_id', 'InChI', 'InChI_Predict']].to_csv('../output/submission_train.csv', index=False)
 
 avg_score = get_score(train_samples['InChI'].values.tolist(), train_samples['InChI_Predict'].values.tolist())
-print(avg_score)
+print('avg score:{}'.format(avg_score))
+
+label_parts_predict = train_samples['InChI_Predict'].map(lambda x: x.split('/'))
+df_predict = pd.DataFrame.from_records(label_parts_predict.values)
+train_samples['InChI_Predict_part2'] = df_predict[0] + '/' + df_predict[1]
+
+label_parts_true = train_samples['InChI_Predict'].map(lambda x: x.split('/'))
+df_true = pd.DataFrame.from_records(label_parts_true.values)
+train_samples['InChI_part2'] = df_true[0] + '/' + df_true[1]
+
+avg_score_part2 = get_score(train_samples['InChI'].values.tolist(), train_samples['InChI_Predict'].values.tolist())
+print('avg score part2:{}'.format(avg_score_part2))
