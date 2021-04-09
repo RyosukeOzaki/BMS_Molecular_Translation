@@ -137,8 +137,8 @@ del test_loader, encoder, decoder, tokenizer; gc.collect()
 # # submission
 # test['InChI'] = [f"InChI=1S/{text}" for text in predictions]
 # test[['image_id', 'InChI']].to_csv('submission.csv', index=False)
-train_samples['InChI_Predict'] = [f"InChI=1S/{text}" for text in predictions]
+train_samples['InChI_Predict'] = [f"InChI=1S/{text}" for text in predictions.tolist()]
 train_samples[['image_id', 'InChI', 'InChI_Predict']].to_csv('../output/submission_train.csv', index=False)
 
-avg_score = get_score(train_samples['InChI'].values(), train_samples['InChI_Predict'].values())
+avg_score = get_score(train_samples['InChI'].values.tolist(), train_samples['InChI_Predict'].values.tolist())
 print(avg_score)
