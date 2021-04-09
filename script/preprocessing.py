@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 import albumentations as A
 
+from torch.utils.data import Dataset
 
 class Tokenizer(object):
     

@@ -42,7 +42,7 @@ warnings.filterwarnings('ignore')
 
 from preprocessing import Tokenizer, TestDataset
 from model import Encoder, DecoderWithAttention
-from utils import get_test_file_path, init_logger, seed_torch, get_transforms
+from utils import get_test_file_path, get_train_file_path, init_logger, seed_torch, get_transforms
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -106,9 +106,15 @@ def inference(test_loader, encoder, decoder, tokenizer, device):
     text_preds = np.concatenate(text_preds)
     return text_preds
 
-test = pd.read_csv('../input/bms-molecular-translation/sample_submission.csv')
-test['file_path'] = test['image_id'].apply(get_test_file_path)
-print(f'test.shape: {test.shape}')
+# test = pd.read_csv('../input/bms-molecular-translation/sample_submission.csv')
+# test['file_path'] = test['image_id'].apply(get_test_file_path)
+# print(f'test.shape: {test.shape}')
+
+train = pd.read_csv('../input/bms-molecular-translation/train_labels.csv')
+train_samples = train.sample(n=10000)
+train_samples['file_path'] = train_samples['image_id'].apply(get_train_file_path)
+print(f'train_samples.shape: {train_samples.shape}')
+
 states = torch.load(f'../input/inchi-resnet-lstm-with-attention-starter/{CFG.model_name}_fold0_best.pth', map_location=torch.device('cpu'))
 
 encoder = Encoder(CFG.model_name, pretrained=False)
@@ -123,11 +129,13 @@ decoder = DecoderWithAttention(attention_dim=CFG.attention_dim,
 decoder.load_state_dict(states['decoder'])
 decoder.to(device)
 del states; gc.collect()
-test_dataset = TestDataset(test, transform=get_transforms(CFG.size, data='valid'))
+test_dataset = TestDataset(train_samples, transform=get_transforms(CFG.size, data='valid'))
 test_loader = DataLoader(test_dataset, batch_size=512, shuffle=False, num_workers=CFG.num_workers)
 predictions = inference(test_loader, encoder, decoder, tokenizer, device)
 del test_loader, encoder, decoder, tokenizer; gc.collect()
 
-# submission
-test['InChI'] = [f"InChI=1S/{text}" for text in predictions]
-test[['image_id', 'InChI']].to_csv('submission.csv', index=False)
+# # submission
+# test['InChI'] = [f"InChI=1S/{text}" for text in predictions]
+# test[['image_id', 'InChI']].to_csv('submission.csv', index=False)
+train_samples['InChI_Predict'] = [f"InChI=1S/{text}" for text in predictions]
+train_samples[['image_id', 'InChI', 'InChI_Predict']].to_csv('submission_train.csv', index=False)
