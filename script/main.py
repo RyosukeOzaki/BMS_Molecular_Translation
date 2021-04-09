@@ -41,7 +41,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 from preprocessing import Tokenizer, TestDataset
-from model import Encoder, DecoderWithAttention
+from model import TopKDecoder, Encoder, DecoderWithAttention
 from utils import get_test_file_path, get_train_file_path, init_logger, seed_torch, get_score, get_transforms
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -71,7 +71,7 @@ class CFG:
     encoder_lr=1e-4
     decoder_lr=4e-4
     min_lr=1e-6
-    batch_size=64
+    batch_size=256
     weight_decay=1e-6
     gradient_accumulation_steps=1
     max_grad_norm=5
@@ -94,32 +94,47 @@ def inference(test_loader, encoder, decoder, tokenizer, device):
     encoder.eval()
     decoder.eval()
     text_preds = []
+    
+    # k = 2
+    topk_decoder = TopKDecoder(decoder, 2, CFG.decoder_dim, CFG.max_len, tokenizer)
+    
     tk0 = tqdm(test_loader, total=len(test_loader))
     for images in tk0:
         images = images.to(device)
+        predictions = []
         with torch.no_grad():
-            features = encoder(images)
-            predictions = decoder.predict(features, CFG.max_len, tokenizer)
-        predicted_sequence = torch.argmax(predictions.detach().cpu(), -1).numpy()
-        _text_preds = tokenizer.predict_captions(predicted_sequence)
-        text_preds.append(_text_preds)
+            encoder_out = encoder(images)
+            batch_size = encoder_out.size(0)
+            encoder_dim = encoder_out.size(-1)
+            encoder_out = encoder_out.view(batch_size, -1, encoder_dim)
+            h, c = decoder.init_hidden_state(encoder_out)
+            hidden = (h.unsqueeze(0), c.unsqueeze(0))
+            
+            decoder_outputs, decoder_hidden, other = topk_decoder(None, hidden, encoder_out)
+            
+            for b in range(batch_size):
+                length = other['topk_length'][b][0]
+                tgt_id_seq = [other['topk_sequence'][di][b, 0, 0].item() for di in range(length)]
+                predictions.append(tgt_id_seq)
+            assert len(predictions) == batch_size
+            
+        predictions = tokenizer.predict_captions(predictions)
+        predictions = ['InChI=1S/' + p.replace('<sos>', '') for p in predictions]
+        # print(predictions[0])
+        text_preds.append(predictions)
     text_preds = np.concatenate(text_preds)
     return text_preds
 
-# test = pd.read_csv('../input/bms-molecular-translation/sample_submission.csv')
-# test['file_path'] = test['image_id'].apply(get_test_file_path)
-# print(f'test.shape: {test.shape}')
+test = pd.read_csv('../input/bms-molecular-translation/sample_submission.csv')
+test['file_path'] = test['image_id'].apply(get_test_file_path)
+print(f'test.shape: {test.shape}')
 
-train = pd.read_csv('../input/bms-molecular-translation/train_labels.csv')
-train_samples = train.sample(n=10000)
-train_samples['file_path'] = train_samples['image_id'].apply(get_train_file_path)
-print(f'train_samples.shape: {train_samples.shape}')
-
-states = torch.load(f'../input/inchi-resnet-lstm-with-attention-starter/{CFG.model_name}_fold0_best.pth', map_location=torch.device('cpu'))
+states = torch.load(f'../input/inchiresnetlstmwithattentionstarter10epochs/resnet34-fold0-10epochs.pth', map_location=torch.device('cpu'))
 
 encoder = Encoder(CFG.model_name, pretrained=False)
 encoder.load_state_dict(states['encoder'])
 encoder.to(device)
+
 decoder = DecoderWithAttention(attention_dim=CFG.attention_dim,
                                embed_dim=CFG.embed_dim,
                                decoder_dim=CFG.decoder_dim,
@@ -128,28 +143,15 @@ decoder = DecoderWithAttention(attention_dim=CFG.attention_dim,
                                device=device)
 decoder.load_state_dict(states['decoder'])
 decoder.to(device)
+
 del states; gc.collect()
-test_dataset = TestDataset(train_samples, transform=get_transforms(CFG.size, data='valid'))
-test_loader = DataLoader(test_dataset, batch_size=512, shuffle=False, num_workers=CFG.num_workers)
+
+test_dataset = TestDataset(test, transform=get_transforms(CFG.size, data='valid'))
+test_loader = DataLoader(test_dataset, batch_size=256, shuffle=False, num_workers=CFG.num_workers)
 predictions = inference(test_loader, encoder, decoder, tokenizer, device)
+
 del test_loader, encoder, decoder, tokenizer; gc.collect()
-
-# # submission
-# test['InChI'] = [f"InChI=1S/{text}" for text in predictions]
-# test[['image_id', 'InChI']].to_csv('submission.csv', index=False)
-train_samples['InChI_Predict'] = [f"InChI=1S/{text}" for text in predictions.tolist()]
-train_samples[['image_id', 'InChI', 'InChI_Predict']].to_csv('../output/submission_train.csv', index=False)
-
-avg_score = get_score(train_samples['InChI'].values.tolist(), train_samples['InChI_Predict'].values.tolist())
-print('avg score:{}'.format(avg_score))
-
-label_parts_predict = train_samples['InChI_Predict'].map(lambda x: x.split('/'))
-df_predict = pd.DataFrame.from_records(label_parts_predict.values)
-train_samples['InChI_Predict_part2'] = df_predict[0] + '/' + df_predict[1]
-
-label_parts_true = train_samples['InChI_Predict'].map(lambda x: x.split('/'))
-df_true = pd.DataFrame.from_records(label_parts_true.values)
-train_samples['InChI_part2'] = df_true[0] + '/' + df_true[1]
-
-avg_score_part2 = get_score(train_samples['InChI'].values.tolist(), train_samples['InChI_Predict'].values.tolist())
-print('avg score part2:{}'.format(avg_score_part2))
+# submission
+test['InChI'] = [f"{text}" for text in predictions]
+test[['image_id', 'InChI']].to_csv('submission.csv', index=False)
+test[['image_id', 'InChI']].head()
