@@ -1,6 +1,11 @@
 import os
 import numpy as np
 import random
+from tqdm import tqdm
+from rdkit import Chem
+from rdkit import RDLogger
+RDLogger.DisableLog('rdApp.*')
+from pathlib import Path
 
 import torch
 import albumentations as A
@@ -75,3 +80,41 @@ def get_transforms(size, data):
             ),
             ToTensorV2(),
         ])
+# ====================================================
+# Nomalization
+# ====================================================
+def _normalize_inchi(inchi):
+    try:
+        mol = Chem.MolFromInchi(inchi)
+        return inchi if (mol is None) else Chem.MolToInchi(mol)
+    except: return inchi
+
+def nomalization_run(orig_path):
+    # Input & Output
+    norm_path = orig_path.with_name(orig_path.stem+'_norm.csv')
+    
+    # Do the job
+    N = norm_path.read_text().count('\n') if norm_path.exists() else 0
+    print(N, 'number of predictions already normalized')
+
+    r = open(str(orig_path), 'r')
+    w = open(str(norm_path), 'a', buffering=1)
+
+    for _ in range(N):
+        r.readline()
+    line = r.readline()  # this line is the header or is where it segfaulted last time
+    w.write(line)
+
+    pbar = tqdm()
+    while True:
+        line = r.readline()
+        if not line:
+            break  # done
+        image_id = line.split(',')[0]
+        inchi = ','.join(line[:-1].split(',')[1:]).replace('"','')
+        inchi_norm = _normalize_inchi(inchi)
+        w.write(f'{image_id},"{inchi_norm}"\n')
+        pbar.update(1)
+    r.close()
+    w.close()
+    print('Done Nomalization')
