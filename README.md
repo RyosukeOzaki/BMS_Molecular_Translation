@@ -1,4 +1,4 @@
-# BMS_Molecular_Translation
+# Kaggle-BMS_Molecular_Translation
 ## Environment
 pass
 ## Setup
